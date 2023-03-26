@@ -1,0 +1,207 @@
+---
+title: "March 08-22"
+author: "Yumou"
+date: "2023-03-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 'dplyr' package
+
+### pipe operator '%>%'
+
+Let $f(x) = x^2 + 1$, and $g(x, y) = x + y^2$. Use the pipe oprator to calculate $g(f(1), 2)$.
+
+```{r, message = FALSE}
+library(dplyr)
+
+f1 = function(x){
+  return(x^2 + 1)
+}
+
+g1 = function(x, y){
+  return(x + y^2)
+}
+
+g1(f1(1), 2)
+
+1 %>% f1() %>% g1(2)
+```
+
+How about $g(3, f(1))$? This can not be computed using the pipe operator
+
+```{r}
+g1(3, f1(1))
+
+1 %>% f1() %>% g1(3)
+```
+
+Let $h(x) = x^3$. Calculate $h(f(1))$?
+
+```{r}
+h1 = function(x){
+  return(x^3)
+}
+
+1 %>% f1() %>% h1()
+```
+
+## Practice questions
+
+1. Use the `fbi` data, select the recordings for Iowa, calculate the crime rate, ordered by year, crime rate. Lastly, output the data with year, type of crime and crime rate.
+
+```{r}
+library(classdata)
+
+fbi.Iowa = 
+fbi %>% filter(state == "Iowa") %>% 
+  mutate(crime.rate = count / population * 70000) %>%
+  arrange(desc(year), desc(crime.rate)) %>%
+  select(year, type, crime.rate)
+```
+
+2. Compare the crime rate for Iowa, Nebraska and Minnesota. Please calculate the average, 25% and 75% quantile of crime rate for each type of crime.
+
+```{r, message = FALSE}
+fbi.summary = 
+fbi %>% filter(state %in% c("Iowa", "Nebraska", "Minnesota")) %>% 
+  mutate(crime.rate = count / population * 70000) %>%
+  group_by(state, type) %>%
+  summarise(average = mean(crime.rate, na.rm = TRUE),
+            quan25 = quantile(crime.rate, 0.25, na.rm = TRUE),
+            quan75 = quantile(crime.rate, 0.75, na.rm = TRUE))
+```
+
+3. Make a bar plot to view the data, facet by the summary statistics.
+
+```{r}
+library(ggplot2)
+
+fbi.summary %>% ggplot(aes(x = type, fill = state)) + 
+  geom_bar(aes(weight = average), position = "dodge") + coord_flip()
+
+library(reshape2)
+fbi.summary %>% melt() %>% 
+  ggplot(aes(x = type, fill = state)) + 
+  geom_bar(aes(weight = value), position = "dodge") + 
+  facet_wrap(~variable) + coord_flip()
+```
+
+4. Use mutate to reorder types of crimes by (median) rate. Plot crime rates by type in side-by-side boxplots. Medians of the boxplots should be ordered.
+
+```{r, message=FALSE, warning=FALSE}
+fbi %>% mutate(crime.rate = count / population * 70000) %>%
+  mutate(type.reorder = factor(type, levels(reorder(type, crime.rate, median, na.rm = TRUE)))) %>%
+  ggplot(aes(x = type.reorder, y = crime.rate)) + geom_boxplot() + coord_flip()
+```
+
+5. Find the ranks for all rates of crime by type of crime and year. Focus on the top states. Find a visual that shows how often each state managed to take the top spot.
+
+```{r, warning = FALSE}
+fbi = fbi %>% mutate(crime.rate = count / population * 70000)
+fbi.rank = fbi %>% group_by(type, year) %>% mutate(
+  best = rank(crime.rate, na.last = "keep") # ranks from lowest rate to highest rate
+)
+
+fbi.rank %>% filter(best == 1 | best == 2 | best == 3) %>% 
+  ggplot(aes(x = state_abbr)) +
+  geom_bar(aes(fill=factor(best))) + facet_wrap(~type, scales="free") + coord_flip()
+
+```
+
+## French fries data example
+
+```{r}
+data(french_fries, package="reshape2")
+
+french_fries.mean = 
+french_fries %>% group_by(time) %>% summarise(
+  m.potato = mean(potato, na.rm=TRUE),
+  m.buttery = mean(buttery, na.rm=TRUE),
+  m.grassy = mean(grassy, na.rm=TRUE),
+  m.rancid = mean(rancid, na.rm=TRUE),
+  m.painty = mean(painty, na.rm=TRUE)
+)
+
+french_fries.mean %>% ggplot(aes(x = time)) + 
+  geom_point(aes(y = m.potato)) +
+  geom_point(shape=2, aes(y=m.rancid)) + 
+  ylab("Average") + 
+  ggtitle("Comparison of potato and rancid over time")
+```
+
+Draw a plot of the average potato-y rating by time, color by treatment.
+How does this plot look like for the rancid rating?
+
+```{r, message = FALSE}
+avgs.time.trt = french_fries %>% group_by(time, treatment) %>% summarise(
+  m.potato = mean(potato, na.rm=TRUE),
+  m.buttery = mean(buttery, na.rm=TRUE),
+  m.grassy = mean(grassy, na.rm=TRUE),
+  m.rancid = mean(rancid, na.rm=TRUE),
+  m.painty = mean(painty, na.rm=TRUE)
+)
+
+avgs.time.trt %>% ggplot(aes(x = time, y = m.potato, group = treatment, color = treatment)) + 
+  geom_point() + geom_line() + 
+  geom_point(aes(y = m.rancid), shape = 2) + 
+  geom_line(aes(y = m.rancid), linetype = 2) + 
+  ylab("Average values")
+```
+
+## `gather()` and `spread()` functions
+
+```{r}
+library(tidyr)
+
+avgs.time.trt.long = avgs.time.trt %>% gather(key = "variable", value = "value", 3 : 7)
+
+avgs.time.trt.long %>% ggplot(aes(x = time, y = value, col = treatment, group = interaction(variable, treatment))) + geom_point(aes(shape = variable)) + geom_line(aes(linetype = variable)) + 
+  ylab("Average values")
+```
+
+
+1. Use gather from the tidyr package to combine the different scales for assessing french fries into a single variable. Call the key-value pair “scale” and “score”.
+
+```{r}
+head(french_fries)
+ff1 = french_fries %>% gather(key = scale, value = score, 5 : 9)
+```
+
+
+2. Use spread from the tidyr package to get a format in which you can directly compare values from week 1 to week 10. Plot a scatterplot of values in week 1 against week 10. Facet by treatment and scale, color by individuals and use different shapes for the replicates. Is there a pattern visible?
+
+```{r, message = FALSE}
+ff2 = ff1 %>% spread(key = time, value = score)
+ff2 %>% ggplot(aes(x = `1`, y = `10`)) + geom_point(aes(color = subject, shape = factor(rep))) + facet_grid(treatment ~ scale)
+```
+
+Can we directly use `spread` function on the original data?
+
+```{r}
+ff3 = french_fries %>% spread(key = time, value = potato)
+```
+
+3. Use gather from the tidyr package to combine the variables for the different types of crimes into one variable. Call the key-value pair “type” and “incidences”. Compute a crime rate.
+
+```{r}
+data("fbiwide", package="classdata")
+fbi.long = fbiwide %>% gather(key = type, value = incidences, 7 : 16) %>%
+  mutate(crime.rate = incidences / population * 70000)
+```
+
+4. Only consider crime rates for Iowa and Minnesota. Use spread to create incidence columns for each of these states. Plot crimes in Iowa against crimes in Minnesota, colour by type of crime. Note: you need to exclude some variables.
+
+```{r, warning = FALSE}
+fbi.IA.MN = fbi.long %>% filter(state == "Iowa" | state == "Minnesota")
+fbi.IA.MN.1 = fbi.IA.MN %>% select(-state_id, -state_abbr, -population, -violent_crime, -incidences) %>%
+  spread(key = state, value = crime.rate)
+
+fbi.IA.MN.1 %>% ggplot(aes(x = Iowa, y = Minnesota)) + 
+  geom_point(aes(color = year)) + facet_wrap(~type, scale = "free") + 
+  geom_abline(slope = 1, intercept = 0)
+```
+
